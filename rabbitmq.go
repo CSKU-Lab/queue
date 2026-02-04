@@ -17,43 +17,51 @@ func NewRabbitMQ(connStr string) (Queue, error) {
 		return nil, err
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = ch.QueueDeclare("grade", true, false, false, false, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = ch.QueueDeclare("run", true, false, false, false, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = ch.QueueDeclare("broadcast", true, false, false, false, nil)
-	if err != nil {
-		return nil, err
-	}
-
 	return &rabbitmq{
 		conn: conn,
 	}, nil
 }
 
-func (r *rabbitmq) CreateQueue(ctx context.Context, name string) (string, error) {
+func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOptions) (string, error) {
 	ch, err := r.conn.Channel()
 	if err != nil {
 		return "", err
 	}
 
-	q, err := ch.QueueDeclare(name, false, true, true, false, nil)
+	if opts == nil {
+		opts = &QueueOptions{}
+	}
+
+	select {
+	case <-ctx.Done():
+		ch.Close()
+		return "", ctx.Err()
+	default:
+	}
+
+	q, err := ch.QueueDeclare(name, opts.Durable, opts.AutoDelete, opts.Exclusive, opts.NoWait, nil)
 	if err != nil {
 		return "", err
 	}
 
 	return q.Name, nil
+}
+
+func (r *rabbitmq) DeleteQueue(ctx context.Context, name string) error {
+	ch, err := r.conn.Channel()
+	if err != nil {
+		return err
+	}
+
+	select {
+	case <-ctx.Done():
+		ch.Close()
+		return ctx.Err()
+	default:
+	}
+
+	_, err = ch.QueueDelete(name, false, false, false)
+	return err
 }
 
 func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, derivery *Derivery) error {
@@ -84,13 +92,17 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 		return err
 	}
 
-	confirmed := <-ch.NotifyPublish(make(chan amqp.Confirmation))
-
-	if confirmed.Ack {
-		return nil
-	} else {
-		return errors.New("failed to publish message to the queue")
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case confirmed := <-ch.NotifyPublish(make(chan amqp.Confirmation)):
+		if confirmed.Ack {
+			return nil
+		} else {
+			return errors.New("failed to publish message to the queue")
+		}
 	}
+
 }
 
 func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, handler func(derivery *Derivery, exit chan struct{}) error) error {

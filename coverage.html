@@ -1,0 +1,273 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>queue: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/CSKU-Lab/queue/rabbitmq.go (89.2%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package queue
+
+import (
+        "context"
+        "errors"
+
+        amqp "github.com/rabbitmq/amqp091-go"
+)
+
+type rabbitmq struct {
+        conn *amqp.Connection
+}
+
+func NewRabbitMQ(connStr string) (Queue, error) <span class="cov8" title="1">{
+        conn, err := amqp.Dial(connStr)
+        if err != nil </span><span class="cov8" title="1">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return &amp;rabbitmq{
+                conn: conn,
+        }, nil</span>
+}
+
+func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOptions) (string, error) <span class="cov8" title="1">{
+        ch, err := r.conn.Channel()
+        if err != nil </span><span class="cov8" title="1">{
+                return "", err
+        }</span>
+
+        <span class="cov8" title="1">if opts == nil </span><span class="cov8" title="1">{
+                opts = &amp;QueueOptions{}
+        }</span>
+
+        <span class="cov8" title="1">select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                ch.Close()
+                return "", ctx.Err()</span>
+        default:<span class="cov8" title="1"></span>
+        }
+
+        <span class="cov8" title="1">q, err := ch.QueueDeclare(name, opts.Durable, opts.AutoDelete, opts.Exclusive, opts.NoWait, nil)
+        if err != nil </span><span class="cov8" title="1">{
+                return "", err
+        }</span>
+
+        <span class="cov8" title="1">return q.Name, nil</span>
+}
+
+func (r *rabbitmq) DeleteQueue(ctx context.Context, name string) error <span class="cov8" title="1">{
+        ch, err := r.conn.Channel()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                ch.Close()
+                return ctx.Err()</span>
+        default:<span class="cov8" title="1"></span>
+        }
+
+        <span class="cov8" title="1">_, err = ch.QueueDelete(name, false, false, false)
+        return err</span>
+}
+
+func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, derivery *Derivery) error <span class="cov8" title="1">{
+        ch, err := r.conn.Channel()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">err = ch.Confirm(false)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">err = ch.PublishWithContext(
+                ctx,
+                exchange,
+                key,
+                false,
+                false,
+                amqp.Publishing{
+                        ContentType:   "application/json",
+                        CorrelationId: derivery.CorrelationID,
+                        ReplyTo:       derivery.ReplyTo,
+                        Body:          derivery.Body,
+                },
+        )
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">select </span>{
+        case &lt;-ctx.Done():<span class="cov8" title="1">
+                return ctx.Err()</span>
+        case confirmed := &lt;-ch.NotifyPublish(make(chan amqp.Confirmation)):<span class="cov8" title="1">
+                if confirmed.Ack </span><span class="cov8" title="1">{
+                        return nil
+                }</span> else<span class="cov0" title="0"> {
+                        return errors.New("failed to publish message to the queue")
+                }</span>
+        }
+
+}
+
+func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, handler func(derivery *Derivery, exit chan struct{}) error) error <span class="cov8" title="1">{
+        ch, err := r.conn.Channel()
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">err = ch.Qos(prefetchCount, 0, false)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">msgs, err := ch.ConsumeWithContext(
+                ctx,
+                queue,
+                "",
+                false,
+                false,
+                false,
+                false,
+                nil,
+        )
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">errChan := make(chan error, 1)
+        exitChan := make(chan struct{}, 1)
+
+        for </span><span class="cov8" title="1">{
+                select </span>{
+                case err := &lt;-errChan:<span class="cov8" title="1">
+                        return err</span>
+                case &lt;-exitChan:<span class="cov8" title="1">
+                        return nil</span>
+                case msg, ok := &lt;-msgs:<span class="cov8" title="1">
+                        if !ok </span><span class="cov0" title="0">{
+                                return nil
+                        }</span>
+                        <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
+                                derivery := &amp;Derivery{
+                                        Body:          msg.Body,
+                                        CorrelationID: msg.CorrelationId,
+                                        ReplyTo:       msg.ReplyTo,
+                                }
+
+                                if err := handler(derivery, exitChan); err != nil </span><span class="cov8" title="1">{
+                                        errChan &lt;- err
+                                        msg.Nack(false, true)
+                                        return
+                                }</span>
+
+                                <span class="cov8" title="1">if err = msg.Ack(false); err != nil </span><span class="cov0" title="0">{
+                                        errChan &lt;- err
+                                        return
+                                }</span>
+                        }()
+                }
+        }
+}
+
+func (r *rabbitmq) Close() <span class="cov8" title="1">error {
+        return r.conn.Close()
+}</span>
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

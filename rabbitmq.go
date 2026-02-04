@@ -135,8 +135,6 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 
 	for {
 		select {
-		case <-ctx.Done():
-			return ctx.Err()
 		case err := <-errChan:
 			return err
 		case <-exitChan:
@@ -167,6 +165,6 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 	}
 }
 
-func (r *rabbitmq) Close() {
-	r.conn.Close()
+func (r *rabbitmq) Close() error {
+	return r.conn.Close()
 }

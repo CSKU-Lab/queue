@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/CSKU-Lab/queue"
 )
@@ -42,7 +43,7 @@ func TestPublishAndConsumeFromQueue(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = q.Consume(ctx, qName, 1, func(derivery *queue.Derivery, exit chan struct{}) error {
+	err = q.Consume(ctx, qName, 1, true, func(derivery *queue.Derivery, exit chan struct{}) error {
 		expected := "Hello World"
 		actual := string(derivery.Body)
 
@@ -212,7 +213,7 @@ func TestConsumeWhenContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err = q.Consume(ctx, "test", 1, func(derivery *queue.Derivery, exit chan struct{}) error {
+	err = q.Consume(ctx, "test", 1, true, func(derivery *queue.Derivery, exit chan struct{}) error {
 		return nil
 	})
 	if err == nil {
@@ -242,7 +243,7 @@ func TestConsumeHandlerError(t *testing.T) {
 		t.Error(err)
 	}
 
-	err = q.Consume(ctx, qName, 1, func(derivery *queue.Derivery, exit chan struct{}) error {
+	err = q.Consume(ctx, qName, 1, true, func(derivery *queue.Derivery, exit chan struct{}) error {
 		return errors.New("some error happened")
 	})
 	if err == nil {
@@ -258,7 +259,7 @@ func TestConsumeOnClosedChannel(t *testing.T) {
 
 	q.Close()
 
-	err = q.Consume(context.Background(), "test", 1, func(derivery *queue.Derivery, exit chan struct{}) error {
+	err = q.Consume(context.Background(), "test", 1, true, func(derivery *queue.Derivery, exit chan struct{}) error {
 		return nil
 	})
 	if err == nil {
@@ -277,5 +278,47 @@ func TestCloseConnection(t *testing.T) {
 
 	if err := q.Close(); err != nil {
 		t.Error(err)
+	}
+}
+
+/*
+ * Drop message
+ */
+func TestDropMessage(t *testing.T) {
+	q, err := queue.NewRabbitMQ(CONN_STR)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ctx, _ := context.WithTimeout(context.Background(), 300*time.Millisecond)
+
+	defer q.DeleteQueue(ctx, "test")
+
+	qName, err := q.CreateQueue(ctx, "test", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = q.Publish(ctx, "", qName, &queue.Derivery{
+		Body: []byte("Hello World"),
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = q.Consume(ctx, qName, 1, false, func(derivery *queue.Derivery, exit chan struct{}) error {
+		return errors.New("simulate error")
+	})
+	if err == nil {
+		t.Error(err)
+	}
+
+	err = q.Consume(ctx, qName, 1, false, func(derivery *queue.Derivery, exit chan struct{}) error {
+		return nil
+	})
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			t.Error(err)
+		}
 	}
 }

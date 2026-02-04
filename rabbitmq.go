@@ -105,7 +105,7 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 
 }
 
-func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, handler func(derivery *Derivery, exit chan struct{}) error) error {
+func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, requeue bool, handler func(derivery *Derivery, exit chan struct{}) error) error {
 	ch, err := r.conn.Channel()
 	if err != nil {
 		return err
@@ -152,7 +152,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 
 				if err := handler(derivery, exitChan); err != nil {
 					errChan <- err
-					msg.Nack(false, true)
+					msg.Nack(false, requeue)
 					return
 				}
 

@@ -55,7 +55,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com/CSKU-Lab/queue/rabbitmq.go (89.2%)</option>
+				<option value="file0">github.com/CSKU-Lab/queue/rabbitmq.go (90.8%)</option>
 				
 				</select>
 			</div>
@@ -176,7 +176,7 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 
 }
 
-func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, handler func(derivery *Derivery, exit chan struct{}) error) error <span class="cov8" title="1">{
+func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, requeue bool, handler func(derivery *Derivery, exit chan struct{}) error) error <span class="cov8" title="1">{
         ch, err := r.conn.Channel()
         if err != nil </span><span class="cov8" title="1">{
                 return err
@@ -211,7 +211,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
                 case &lt;-exitChan:<span class="cov8" title="1">
                         return nil</span>
                 case msg, ok := &lt;-msgs:<span class="cov8" title="1">
-                        if !ok </span><span class="cov0" title="0">{
+                        if !ok </span><span class="cov8" title="1">{
                                 return nil
                         }</span>
                         <span class="cov8" title="1">go func() </span><span class="cov8" title="1">{
@@ -223,7 +223,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 
                                 if err := handler(derivery, exitChan); err != nil </span><span class="cov8" title="1">{
                                         errChan &lt;- err
-                                        msg.Nack(false, true)
+                                        msg.Nack(false, requeue)
                                         return
                                 }</span>
 
@@ -236,7 +236,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
         }
 }
 
-func (r *rabbitmq) Close() <span class="cov8" title="1">error {
+func (r *rabbitmq) Close() error <span class="cov8" title="1">{
         return r.conn.Close()
 }</span>
 </pre>

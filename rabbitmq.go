@@ -27,6 +27,7 @@ func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOpti
 	if err != nil {
 		return "", err
 	}
+	defer ch.Close()
 
 	if opts == nil {
 		opts = &QueueOptions{}
@@ -52,10 +53,10 @@ func (r *rabbitmq) DeleteQueue(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	defer ch.Close()
 
 	select {
 	case <-ctx.Done():
-		ch.Close()
 		return ctx.Err()
 	default:
 	}
@@ -69,6 +70,7 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 	if err != nil {
 		return err
 	}
+	defer ch.Close()
 
 	err = ch.Confirm(false)
 	if err != nil {
@@ -110,6 +112,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 	if err != nil {
 		return err
 	}
+	defer ch.Close()
 
 	err = ch.Qos(prefetchCount, 0, false)
 	if err != nil {

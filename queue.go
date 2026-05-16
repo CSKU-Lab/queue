@@ -14,6 +14,7 @@ type Derivery struct {
 	Body          []byte
 	CorrelationID string
 	ReplyTo       string
+	Headers       map[string]interface{}
 }
 
 type QueueOptions struct {

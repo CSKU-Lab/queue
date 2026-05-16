@@ -77,6 +77,11 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 		return err
 	}
 
+	headers := amqp.Table{}
+	for k, v := range derivery.Headers {
+		headers[k] = v
+	}
+
 	err = ch.PublishWithContext(
 		ctx,
 		exchange,
@@ -88,6 +93,7 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 			CorrelationId: derivery.CorrelationID,
 			ReplyTo:       derivery.ReplyTo,
 			Body:          derivery.Body,
+			Headers:       headers,
 		},
 	)
 	if err != nil {
@@ -147,10 +153,17 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 				return nil
 			}
 			go func() {
+				headers := make(map[string]interface{})
+				for k, v := range msg.Headers {
+					if s, ok := v.(string); ok {
+						headers[k] = s
+					}
+				}
 				derivery := &Derivery{
 					Body:          msg.Body,
 					CorrelationID: msg.CorrelationId,
 					ReplyTo:       msg.ReplyTo,
+					Headers:       headers,
 				}
 
 				if err := handler(derivery, exitChan); err != nil {

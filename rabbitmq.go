@@ -3,12 +3,15 @@ package queue
 import (
 	"context"
 	"errors"
+	"sync"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type rabbitmq struct {
-	conn *amqp.Connection
+	mu      sync.Mutex
+	conn    *amqp.Connection
+	connStr string
 }
 
 func NewRabbitMQ(connStr string) (Queue, error) {
@@ -18,12 +21,27 @@ func NewRabbitMQ(connStr string) (Queue, error) {
 	}
 
 	return &rabbitmq{
-		conn: conn,
+		conn:    conn,
+		connStr: connStr,
 	}, nil
 }
 
+// channel returns an AMQP channel, reconnecting if the connection was dropped.
+func (r *rabbitmq) channel() (*amqp.Channel, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.conn.IsClosed() {
+		conn, err := amqp.Dial(r.connStr)
+		if err != nil {
+			return nil, err
+		}
+		r.conn = conn
+	}
+	return r.conn.Channel()
+}
+
 func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOptions) (string, error) {
-	ch, err := r.conn.Channel()
+	ch, err := r.channel()
 	if err != nil {
 		return "", err
 	}
@@ -49,7 +67,7 @@ func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOpti
 }
 
 func (r *rabbitmq) DeleteQueue(ctx context.Context, name string) error {
-	ch, err := r.conn.Channel()
+	ch, err := r.channel()
 	if err != nil {
 		return err
 	}
@@ -66,7 +84,7 @@ func (r *rabbitmq) DeleteQueue(ctx context.Context, name string) error {
 }
 
 func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, derivery *Derivery) error {
-	ch, err := r.conn.Channel()
+	ch, err := r.channel()
 	if err != nil {
 		return err
 	}
@@ -114,7 +132,7 @@ func (r *rabbitmq) Publish(ctx context.Context, exchange string, key string, der
 }
 
 func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int, requeue bool, handler func(derivery *Derivery, exit chan struct{}) error) error {
-	ch, err := r.conn.Channel()
+	ch, err := r.channel()
 	if err != nil {
 		return err
 	}
@@ -182,5 +200,7 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 }
 
 func (r *rabbitmq) Close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return r.conn.Close()
 }

@@ -26,18 +26,33 @@ func NewRabbitMQ(connStr string) (Queue, error) {
 	}, nil
 }
 
+func (r *rabbitmq) dialLocked() error {
+	conn, err := amqp.Dial(r.connStr)
+	if err != nil {
+		return err
+	}
+	r.conn = conn
+	return nil
+}
+
 // channel returns an AMQP channel, reconnecting if the connection was dropped.
 func (r *rabbitmq) channel() (*amqp.Channel, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.conn.IsClosed() {
-		conn, err := amqp.Dial(r.connStr)
-		if err != nil {
+		if err := r.dialLocked(); err != nil {
 			return nil, err
 		}
-		r.conn = conn
 	}
-	return r.conn.Channel()
+	ch, err := r.conn.Channel()
+	if err != nil {
+		// IsClosed() returned false but connection is dead — reconnect once
+		if err2 := r.dialLocked(); err2 != nil {
+			return nil, err
+		}
+		return r.conn.Channel()
+	}
+	return ch, nil
 }
 
 func (r *rabbitmq) CreateQueue(ctx context.Context, name string, opts *QueueOptions) (string, error) {

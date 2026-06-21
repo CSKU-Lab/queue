@@ -214,6 +214,49 @@ func (r *rabbitmq) Consume(ctx context.Context, queue string, prefetchCount int,
 	}
 }
 
+func (r *rabbitmq) DeclareExchange(ctx context.Context, name, kind string, durable bool) error {
+	ch, err := r.channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	return ch.ExchangeDeclare(name, kind, durable, false, false, false, nil)
+}
+
+// CreateBoundQueue creates a server-named auto-delete queue and binds it to the
+// given fanout exchange. Returns the generated queue name for the caller to consume.
+func (r *rabbitmq) CreateBoundQueue(ctx context.Context, exchange string) (string, error) {
+	ch, err := r.channel()
+	if err != nil {
+		return "", err
+	}
+	defer ch.Close()
+
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+	}
+
+	q, err := ch.QueueDeclare("", false, true, false, false, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if err := ch.QueueBind(q.Name, "", exchange, false, nil); err != nil {
+		return "", err
+	}
+
+	return q.Name, nil
+}
+
 func (r *rabbitmq) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

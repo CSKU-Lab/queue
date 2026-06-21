@@ -8,6 +8,8 @@ type Queue interface {
 	Close() error
 	CreateQueue(ctx context.Context, name string, opts *QueueOptions) (string, error)
 	DeleteQueue(ctx context.Context, name string) error
+	DeclareExchange(ctx context.Context, name, kind string, durable bool) error
+	CreateBoundQueue(ctx context.Context, exchange string) (string, error)
 }
 
 type Derivery struct {
